@@ -1,0 +1,52 @@
+name: Release
+
+# Push a tag like v1.2.0 to build, package, and publish a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      # All optional. Without them the release is ad-hoc signed.
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+      NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test
+        run: swift test
+
+      - name: Import signing certificate
+        if: env.MACOS_CERTIFICATE_P12 != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Package
+        run: scripts/package.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/SpeakEasy.zip dist/SpeakEasy.dmg \
+            --title "SpeakEasy ${GITHUB_REF_NAME#v}" \
+            --generate-notes
