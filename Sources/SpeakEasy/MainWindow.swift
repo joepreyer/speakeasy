@@ -168,6 +168,38 @@ struct MainView: View {
 
 // MARK: - Home
 
+struct UpdateBanner: View {
+    @ObservedObject private var updater = Updater.shared
+
+    var body: some View {
+        if let release = updater.available {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SpeakEasy \(release.version) is available")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(updater.state == .downloading ? "Downloading…" : "You have \(updater.currentVersion).")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("What's New", action: updater.openReleasePage)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                Button("Update") { UpdateConfirmation.present() }
+                    .controlSize(.large)
+                    .disabled(updater.state == .downloading)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Color.orange.opacity(0.1)))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.25)))
+        }
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @State private var query = ""
@@ -199,6 +231,8 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 32) {
                 Text("Welcome back, \(firstName)")
                     .font(.system(size: 28, weight: .semibold))
+
+                UpdateBanner()
 
                 HStack(alignment: .top, spacing: 32) {
                     VStack(alignment: .leading, spacing: 28) {
@@ -522,6 +556,8 @@ struct SettingsView: View {
                         Text("General")
                     }
 
+                    UpdatesSection()
+
                     Section {
                         HStack {
                             SecureField("API key", text: $apiKey, prompt: Text(hasKey ? "•••••••• (saved)" : "sk-…"))
@@ -596,5 +632,44 @@ struct SettingsView: View {
                 .padding(.horizontal, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+struct UpdatesSection: View {
+    @ObservedObject private var updater = Updater.shared
+
+    private var status: String {
+        if let release = updater.available { return "SpeakEasy \(release.version) is available." }
+        switch updater.state {
+        case .checking: return "Checking…"
+        case .upToDate: return "You're up to date."
+        case .downloading: return "Downloading the update…"
+        case .failed(let message): return message
+        case .idle: return ""
+        }
+    }
+
+    var body: some View {
+        Section {
+            Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+            HStack {
+                Text(status)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if updater.available != nil {
+                    Button("Update…") { UpdateConfirmation.present() }
+                        .disabled(updater.state == .downloading)
+                } else {
+                    Button("Check Now", action: updater.check)
+                        .disabled(updater.state == .checking)
+                }
+            }
+        } header: {
+            Text("Updates")
+        } footer: {
+            Text(updater.isInstalledCopy
+                 ? "Version \(updater.currentVersion)"
+                 : "Version \(updater.currentVersion). Development build: updates aren't installed automatically.")
+        }
     }
 }

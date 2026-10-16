@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = FnKeyMonitor()
@@ -16,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = AppStore.shared
     private let settings = Settings.shared
     private var statusItem: NSStatusItem?
+    private let updateMenuItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
+    private var updateObserver: AnyCancellable?
     private var contextTask: Task<DictationContext, Never>?
 
     // Holding fn for less than this is treated as an accidental tap.
@@ -42,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             onboarding.show()
         }
+
+        Updater.shared.startAutomaticChecks()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -167,6 +172,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = icon
 
         let menu = NSMenu()
+        updateMenuItem.target = self
+        updateMenuItem.isHidden = true
+        menu.addItem(updateMenuItem)
+        updateObserver = Updater.shared.$available
+            .combineLatest(Updater.shared.$state)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] release, state in
+                guard let self else { return }
+                self.updateMenuItem.isHidden = release == nil
+                if let release {
+                    self.updateMenuItem.title = state == .downloading
+                        ? "Downloading update…"
+                        : "Update to SpeakEasy \(release.version)…"
+                }
+            }
+
         let items = [
             NSMenuItem(title: "Open SpeakEasy", action: #selector(openMainWindow), keyEquivalent: ""),
             NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","),
@@ -192,5 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openOnboarding() {
         onboarding.show()
+    }
+
+    @objc private func installUpdate() {
+        mainWindow.show(page: .home)
+        UpdateConfirmation.present()
     }
 }
