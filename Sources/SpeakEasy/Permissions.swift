@@ -1,6 +1,8 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import IOKit.hid
+import Security
 import ServiceManagement
 
 enum Permission: CaseIterable, Identifiable {
@@ -46,9 +48,13 @@ enum Permission: CaseIterable, Identifiable {
 enum Permissions {
     static func isGranted(_ permission: Permission) -> Bool {
         switch permission {
-        case .microphone: return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        case .accessibility: return AXIsProcessTrusted()
-        case .inputMonitoring: return CGPreflightListenEventAccess()
+        case .microphone:
+            return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        case .accessibility:
+            return AXIsProcessTrusted()
+        case .inputMonitoring:
+            // CGPreflightListenEventAccess can keep its launch-time answer; IOHIDCheckAccess asks again.
+            return CGPreflightListenEventAccess() || IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         }
     }
 
@@ -64,15 +70,31 @@ enum Permissions {
                 openSettings(for: permission)
             }
         case .accessibility:
+            resetStaleEntry(service: "Accessibility")
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
             if !AXIsProcessTrustedWithOptions(options as CFDictionary) {
                 openSettings(for: permission)
             }
         case .inputMonitoring:
+            resetStaleEntry(service: "ListenEvent")
             if !CGRequestListenEventAccess() {
                 openSettings(for: permission)
             }
         }
+    }
+
+    /// System Settings can list SpeakEasy as switched on while the grant belongs to a previous
+    /// build with a different signature. Clearing the entry makes macOS add a fresh one for
+    /// this build. Only called when the permission isn't working, so nothing valid is lost.
+    private static func resetStaleEntry(service: String) {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        task.arguments = ["reset", service, bundleID]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        task.waitUntilExit()
     }
 
     static func openSettings(for permission: Permission) {
@@ -111,14 +133,30 @@ enum Permissions {
 
     // MARK: Relaunch
 
-    /// Input Monitoring only takes effect in a fresh process.
+    /// Some permissions only take effect in a fresh process.
     static func relaunch() {
-        let path = Bundle.main.bundlePath
+        UserDefaults.standard.synchronize()
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5; /usr/bin/open \"$0\"", path]
+        task.arguments = [
+            "-c", "while kill -0 \"$0\" 2>/dev/null; do sleep 0.1; done; /usr/bin/open \"$1\"",
+            String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath,
+        ]
         try? task.run()
         NSApp.terminate(nil)
+    }
+
+    /// Ad-hoc builds get a new code signature every release, so grants saved for the
+    /// previous build no longer apply to this one.
+    static func isAdHocSigned(_ appURL: URL) -> Bool {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(appURL as CFURL, [], &code) == errSecSuccess, let code else { return false }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any]
+        else { return false }
+        let flags = (dict[kSecCodeInfoFlags as String] as? UInt32) ?? 0
+        return flags & SecCodeSignatureFlags.adhoc.rawValue != 0
     }
 
     private static func open(_ url: String) {

@@ -7,6 +7,7 @@
 set -euo pipefail
 
 REPO="joepreyer/speakeasy"
+BUNDLE_ID="io.github.joepreyer.speakeasy"
 URL="${SPEAKEASY_DOWNLOAD_URL:-https://github.com/$REPO/releases/latest/download/SpeakEasy.zip}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
@@ -41,8 +42,19 @@ if pgrep -x SpeakEasy >/dev/null; then
 fi
 
 bold "Installing to ${DEST_DIR}…"
+REPLACING=""
+[ -d "$DEST" ] && REPLACING="yes"
 rm -rf "$DEST"
 ditto "$TMP/SpeakEasy.app" "$DEST"
+
+# Ad-hoc builds get a new signature every release, so permissions saved for the old copy
+# show as switched on in System Settings but don't apply. Clear them so setup starts clean.
+SIGNATURE="$(codesign -dv "$DEST" 2>&1 || true)"
+if [ -n "$REPLACING" ] && [[ "$SIGNATURE" == *"Signature=adhoc"* ]]; then
+    for service in Accessibility ListenEvent Microphone; do
+        tccutil reset "$service" "$BUNDLE_ID" >/dev/null 2>&1 || true
+    done
+fi
 
 open "$DEST"
 echo

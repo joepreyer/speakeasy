@@ -64,6 +64,7 @@ final class OnboardingModel: ObservableObject {
         didSet { UserDefaults.standard.set(step.rawValue, forKey: "onboardingStep") }
     }
     @Published private(set) var granted: [Permission: Bool] = [:]
+    @Published private(set) var requested: Set<Permission> = []
     @Published private(set) var monitorRunning = false
     @Published private(set) var fnKeyIsFree = false
     @Published private(set) var hasKey = Keychain.loadAPIKey() != nil
@@ -118,6 +119,17 @@ final class OnboardingModel: ObservableObject {
         if running != monitorRunning { monitorRunning = running }
         let free = Permissions.fnKeyIsFree
         if free != fnKeyIsFree { fnKeyIsFree = free }
+    }
+
+    func request(_ permission: Permission) {
+        requested.insert(permission)
+        Permissions.request(permission)
+    }
+
+    /// Accessibility and Input Monitoring may not register until SpeakEasy restarts.
+    func offersRestart(for permission: Permission) -> Bool {
+        if permission == .inputMonitoring && needsRestart { return true }
+        return permission != .microphone && requested.contains(permission) && granted[permission] != true
     }
 
     func next() {
@@ -341,20 +353,30 @@ private struct PermissionsStep: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(permission.title)
                     .font(.system(size: 14, weight: .semibold))
-                Text(permission == .inputMonitoring && model.needsRestart
-                     ? "Almost there: SpeakEasy needs to restart to finish."
-                     : permission.reason)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if model.offersRestart(for: permission) {
+                    Text("Switched it on? Restart to finish. ")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    + Text("Open Settings")
+                        .font(.system(size: 12))
+                        .foregroundColor(.accentColor)
+                } else {
+                    Text(permission.reason)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .onTapGesture {
+                if model.offersRestart(for: permission) { Permissions.openSettings(for: permission) }
             }
             Spacer()
-            if permission == .inputMonitoring && model.needsRestart {
-                Button("Restart") { Permissions.relaunch() }
-            } else if model.granted[permission] == true {
+            if model.granted[permission] == true && !model.offersRestart(for: permission) {
                 StatusBadge(text: "Allowed")
+            } else if model.offersRestart(for: permission) {
+                Button("Restart") { Permissions.relaunch() }
             } else {
-                Button("Allow") { Permissions.request(permission) }
+                Button("Allow") { model.request(permission) }
             }
         }
         .padding(.horizontal, 20)

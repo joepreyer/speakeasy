@@ -131,15 +131,22 @@ final class Updater: ObservableObject {
 
     /// The copy happens in a detached shell so it can wait for this process to quit first.
     private static func replace(_ appURL: URL, with newApp: URL) throws {
+        // Stale grants for an ad-hoc build show as switched on in System Settings but don't
+        // apply to the new build, so clear them and let the setup assistant ask again.
         let script = """
         while kill -0 "$0" 2>/dev/null; do sleep 0.2; done
         rm -rf "$1.updating"
         /usr/bin/ditto "$2" "$1.updating" && rm -rf "$1" && mv "$1.updating" "$1"
+        if [ "$3" = "reset" ]; then
+            for service in Accessibility ListenEvent Microphone; do /usr/bin/tccutil reset "$service" "$4" >/dev/null 2>&1; done
+        fi
         /usr/bin/open "$1"
         """
+        let reset = Permissions.isAdHocSigned(newApp) ? "reset" : "keep"
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", script, String(ProcessInfo.processInfo.processIdentifier), appURL.path, newApp.path]
+        task.arguments = ["-c", script, String(ProcessInfo.processInfo.processIdentifier), appURL.path, newApp.path,
+                          reset, Bundle.main.bundleIdentifier ?? ""]
         try task.run()
     }
 
