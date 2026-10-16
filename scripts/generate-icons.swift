@@ -63,7 +63,17 @@ func drawMark(in context: CGContext, center: CGPoint, height: CGFloat, bars: Int
     }
     let pitch = bounds.width / (CGFloat(bars) - 0.35)
     let barWidth = pitch * 0.62
-    for segment in barSegments(in: placed, barWidth: barWidth, pitch: pitch) {
+    var segments = barSegments(in: placed, barWidth: barWidth, pitch: pitch)
+    // The glyph's top terminal is shorter than its bottom one; mirror bars through the
+    // center so the S reads as rotationally symmetric.
+    let mid = CGPoint(x: placed.boundingBoxOfPath.midX, y: placed.boundingBoxOfPath.midY)
+    for segment in segments {
+        let rotated = CGRect(x: 2 * mid.x - segment.maxX, y: 2 * mid.y - segment.maxY,
+                             width: segment.width, height: segment.height)
+        let columnTaken = segments.contains { abs($0.midX - rotated.midX) < 1 && $0.intersects(rotated) }
+        if !columnTaken { segments.append(rotated) }
+    }
+    for segment in segments {
         context.addPath(CGPath(roundedRect: segment, cornerWidth: barWidth / 2, cornerHeight: barWidth / 2, transform: nil))
     }
     context.fillPath()
