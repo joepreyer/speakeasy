@@ -18,7 +18,7 @@ final class Settings: ObservableObject {
     static let shared = Settings()
 
     static let defaultTranscriptionModel = "gpt-transcribe"
-    static let defaultFormattingModel = "gpt-6-luna"
+    static let defaultFormattingModel = "gpt-5.4-mini"
 
     private let defaults = UserDefaults.standard
 
@@ -53,7 +53,7 @@ final class Settings: ObservableObject {
 
     private init() {
         transcriptionModel = defaults.string(forKey: "transcriptionModel") ?? Self.defaultTranscriptionModel
-        smartFormatting = defaults.object(forKey: "smartFormatting") as? Bool ?? true
+        smartFormatting = defaults.object(forKey: "smartFormatting") as? Bool ?? false
         formattingModel = defaults.string(forKey: "formattingModel") ?? Self.defaultFormattingModel
         developerMode = DeveloperMode(rawValue: defaults.string(forKey: "developerMode") ?? "") ?? .auto
         tagFiles = defaults.object(forKey: "tagFiles") as? Bool ?? true

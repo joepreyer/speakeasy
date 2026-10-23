@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Dictation flow
 
     private func beginDictation() {
-        guard Keychain.loadAPIKey() != nil, Permissions.isGranted(.microphone) else {
+        guard let apiKey = Keychain.loadAPIKey(), Permissions.isGranted(.microphone) else {
             onboarding.show()
             return
         }
@@ -73,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             overlay.flash(.error(error.localizedDescription))
             return
+        }
+        if settings.smartFormatting {
+            OpenAI.warmUp(apiKey: apiKey, model: settings.effectiveFormattingModel)
         }
 
         // Workspace detection and file indexing run while the user is still talking.
@@ -100,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let released = Date()
         guard let audioURL = recorder.stop(), let apiKey = Keychain.loadAPIKey() else {
             overlay.hide()
             return
@@ -118,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 insert(output.text)
+                NSLog("SpeakEasy: timing release-to-insert=\(Int(Date().timeIntervalSince(released) * 1000))ms")
                 store.add(Dictation(
                     id: UUID(),
                     date: Date(),

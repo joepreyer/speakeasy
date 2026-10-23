@@ -24,6 +24,16 @@ enum OpenAI {
         return json
     }
 
+    /// Opens the HTTPS connection while the user is still talking, so the requests
+    /// after release skip DNS, TCP, and TLS setup.
+    static func warmUp(apiKey: String, model: String) {
+        guard let url = URL(string: "https://api.openai.com/v1/models/\(model)") else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: request).resume()
+    }
+
     static func validate(apiKey: String) async throws {
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
         request.timeoutInterval = 15

@@ -49,3 +49,43 @@ final class FormatterPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains("Developer context"))
     }
 }
+
+final class FormattingGateTests: XCTestCase {
+    func testSkipsShortCleanTranscripts() {
+        XCTAssertFalse(Formatter.needsFormatting("Sounds good, see you then.", context: DictationContext()))
+    }
+
+    func testFormatsFillersCorrectionsAndSpokenPunctuation() {
+        let context = DictationContext()
+        XCTAssertTrue(Formatter.needsFormatting("Um, see you then.", context: context))
+        XCTAssertTrue(Formatter.needsFormatting("Let's meet Monday, actually Tuesday.", context: context))
+        XCTAssertTrue(Formatter.needsFormatting("See you then question mark", context: context))
+    }
+
+    func testFormatsNumberWordsAndRepeats() {
+        let context = DictationContext()
+        XCTAssertTrue(Formatter.needsFormatting("See you at seven.", context: context))
+        XCTAssertTrue(Formatter.needsFormatting("I think the the plan works.", context: context))
+    }
+
+    func testFormatsLongOrLowercaseTranscripts() {
+        let context = DictationContext()
+        let long = "This is a perfectly clean sentence that simply has more words than the short limit allows."
+        XCTAssertTrue(Formatter.needsFormatting(long, context: context))
+        XCTAssertTrue(Formatter.needsFormatting("sounds good.", context: context))
+    }
+
+    func testAlwaysFormatsInDeveloperApps() {
+        var context = DictationContext()
+        context.isDeveloperApp = true
+        XCTAssertTrue(Formatter.needsFormatting("Run the tests.", context: context))
+    }
+
+    func testDropsFinalPeriodInChatApps() {
+        var context = DictationContext()
+        context.bundleID = "com.tinyspeck.slackmacgap"
+        XCTAssertEqual(Formatter.unformatted("Sounds good, see you then.", context: context), "Sounds good, see you then")
+        XCTAssertEqual(Formatter.unformatted("Sounds good. See you then.", context: context), "Sounds good. See you then.")
+        XCTAssertEqual(Formatter.unformatted("Sounds good.", context: DictationContext()), "Sounds good.")
+    }
+}

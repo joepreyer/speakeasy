@@ -42,7 +42,7 @@ open build/SpeakEasy.app
 ## What it does
 
 - **Dictate anywhere.** Hold fn in any text field, speak, and release. A small waveform at the bottom of the screen shows it's listening.
-- **Clean writing, not a raw transcript.** Filler words disappear, self-corrections are applied ("at 2... actually 3" becomes "at 3"), spoken punctuation works ("comma", "new line"), and spoken lists become numbered lists.
+- **Optional clean-up.** Turn on Smart formatting in Settings and filler words disappear, self-corrections are applied ("at 2... actually 3" becomes "at 3"), spoken punctuation works ("comma", "new line"), and spoken lists become numbered lists.
 - **Built for developers.** In code editors and terminals, SpeakEasy keeps commands and identifiers exact, handles "camel case" and "snake case", spells tools like Supabase and Vercel correctly, and tags files you mention as `@File.swift` in Cursor and Windsurf.
 - **A dictionary that learns.** Add names and jargon yourself, or just fix a misspelled word right after dictating it and SpeakEasy remembers.
 - **History.** Every dictation is saved on your Mac, searchable by day, with word count and speaking-speed stats.
@@ -65,7 +65,7 @@ The setup assistant asks for three macOS permissions and explains each one:
 | Accessibility | Pastes the text into the app you're using, and notices spelling fixes for the dictionary. |
 | Input Monitoring | Detects when you hold fn. Other keys aren't recorded. |
 
-Audio goes directly from your Mac to OpenAI for transcription (`gpt-transcribe`) and formatting (`gpt-6-luna`), using your own API key. There's no SpeakEasy server. Your key is stored in the macOS Keychain, and your history and dictionary stay in `~/Library/Application Support/SpeakEasy`.
+Audio goes directly from your Mac to OpenAI for transcription (`gpt-transcribe`), using your own API key. Smart formatting (`gpt-5.4-mini`) is off by default for speed; turn it on in Settings. There's no SpeakEasy server. Your key is stored in the macOS Keychain, and your history and dictionary stay in `~/Library/Application Support/SpeakEasy`.
 
 ## Uninstall
 

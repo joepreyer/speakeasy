@@ -46,6 +46,25 @@ enum Formatter {
         return content
     }
 
+    /// Short transcripts with nothing for the formatter to fix skip the formatting round trip.
+    static func needsFormatting(_ transcript: String, context: DictationContext) -> Bool {
+        if context.isDeveloperApp { return true }
+        if transcript.split(whereSeparator: \.isWhitespace).count > 12 { return true }
+        if let first = transcript.first, first.isLowercase { return true }
+        return transcript.range(of: formattingCues, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Fillers, self-corrections, spoken punctuation, number words, and repeated words.
+    private static let formattingCues = #"\b(um+|uh+|er+|ah+|hmm+|erm|like|you know|i mean|sort of|kind of|actually|wait|sorry|i meant|scratch that|make that|rather|comma|period|full stop|question mark|exclamation|colon|semicolon|dash|hyphen|ellipsis|quote|unquote|paren|new line|newline|new paragraph|bullet|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand|million|percent|dollars?|first|second|third|fourth|fifth)\b|\b(\w+) \2\b"#
+
+    /// Applies the chat-app rule (no final period on a single short sentence) to a transcript that skips formatting.
+    static func unformatted(_ transcript: String, context: DictationContext) -> String {
+        guard isMessagingApp(context), transcript.hasSuffix("."),
+              !transcript.dropLast().contains(where: { ".!?".contains($0) })
+        else { return transcript }
+        return String(transcript.dropLast())
+    }
+
     /// Guards against the model echoing tags or answering the transcript instead of formatting it.
     private static func validated(_ output: String, transcript: String) -> String {
         var text = output
@@ -74,6 +93,10 @@ enum Formatter {
         "com.hnc.Discord", "ru.keepcoder.Telegram",
     ]
 
+    private static func isMessagingApp(_ context: DictationContext) -> Bool {
+        context.bundleID.map(messagingBundleIDs.contains) ?? false
+    }
+
     static func systemPrompt(context: DictationContext, terms: [String], files: [String]) -> String {
         var prompt = """
         You are the formatting engine of a voice dictation app. You receive a raw speech-to-text transcript inside <transcript> tags. Rewrite it into the exact text the speaker intended to type, and output only that text: no quotes, tags, labels, or commentary.
@@ -93,7 +116,7 @@ enum Formatter {
 
         if let app = context.appName {
             prompt += "\n\nThe text will be inserted into \(app)."
-            if let bundleID = context.bundleID, messagingBundleIDs.contains(bundleID) {
+            if isMessagingApp(context) {
                 prompt += " This is a chat app: keep it casual and omit the final period after a single short sentence."
             }
         }
